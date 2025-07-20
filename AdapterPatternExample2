@@ -1,0 +1,146 @@
+public class Movie
+{
+    public string Name { get; set; } = string.Empty;
+    public DateTime ReleaseDate { get; set; }
+    public double Rating { get; set; }
+}
+----------------------------------------------------------
+public interface IBroadcaster
+{
+    void BroadcastToExternalPartners();
+}
+----------------------------------------------------------
+public class ThirdPartyBroadcaster
+{
+    public void Broadcast(string jsonMovies)
+    {
+        Console.WriteLine("\nNew movies are available for broadcasting from 3rd party system...");
+        Console.WriteLine(jsonMovies);
+    }
+}
+----------------------------------------------------------
+public class MovieRegistry
+{
+    /// <summary>
+    /// Get all movies from registry in the XML format.
+    /// Let’s say we can't modify the existing functionality
+    /// and that movies will always be returned in the XML format.
+    /// </summary>
+    /// <returns>Movies in the XML format.</returns>
+    public XDocument GetAll() => GetAllFromDatabase();
+
+    private XDocument GetAllFromDatabase()
+    {
+        var xDocument = new XDocument();
+        var xMoviesElement = new XElement("Movies");
+
+        var xMovieCollection = GetRegisteredMovies()
+            .Select(movie => new XElement(
+                "Movie",
+                new XAttribute("Name", movie.Name),
+                new XAttribute("ReleaseDate", movie.ReleaseDate),
+                new XAttribute("Rating", movie.Rating)));
+
+        xMoviesElement.Add(xMovieCollection);
+        xDocument.Add(xMoviesElement);
+
+        return xDocument;
+    }
+
+    private IEnumerable<Movie> GetRegisteredMovies() =>
+        new List<Movie>()
+        {
+            new()
+            {
+                Name = "Grave of the Fireflies",
+                ReleaseDate = new DateTime(1988, 4, 16),
+                Rating = 8.5,
+            },
+            new()
+            {
+                Name = "Tae Guk Gi: The Brotherhood of War",
+                ReleaseDate = new DateTime(2004, 2, 6),
+                Rating = 8.1,
+            },
+            new()
+            {
+                Name = "The Man from Earth",
+                ReleaseDate = new DateTime(2007, 11, 13),
+                Rating = 7.9,
+            },
+            new()
+            {
+                Name = "Incendies ",
+                ReleaseDate = new DateTime(2010, 1, 12),
+                Rating = 8.3,
+            },
+        };
+}
+----------------------------------------------------------
+/// <summary>
+/// There is no way to pass an xDocument from the registry to the third party broadcaster,
+/// so we need to create the adapter, which will make these two parties work together.
+/// </summary>
+public class BroadcastAdapter : IBroadcaster
+{
+    private readonly MovieRegistry _movieRegistry;
+    private readonly ThirdPartyBroadcaster _thirdPartyBroadcaster;
+
+    public BroadcastAdapter(MovieRegistry movieRegistry)
+    {
+        _movieRegistry = movieRegistry;
+        _thirdPartyBroadcaster = new ThirdPartyBroadcaster();
+    }
+
+    public void BroadcastToExternalPartners()
+    {
+        string jsonMovies = ConvertRegistryMoviesToJson();
+        _thirdPartyBroadcaster.Broadcast(jsonMovies);
+    }
+
+    private string ConvertRegistryMoviesToJson()
+    {
+        XDocument xmlMovies = _movieRegistry.GetAll();
+        Console.WriteLine("Movies from the internal registry...");
+        Console.WriteLine(xmlMovies);
+
+        IEnumerable<Movie> modelMovies = xmlMovies
+            .Element("Movies")!
+            .Elements("Movie")
+            .Select(movie => new Movie
+            {
+                Name = movie.Attribute(nameof(Movie.Name))!.Value,
+                ReleaseDate = DateTime.Parse(movie.Attribute(nameof(Movie.ReleaseDate))!.Value),
+                Rating = Convert.ToDouble(movie.Attribute(nameof(Movie.Rating))!.Value),
+            });
+
+        string jsonMovies = JsonConvert.SerializeObject(modelMovies, Formatting.Indented);
+        Console.WriteLine("\nMovies from the internal registry are converted to JSON format");
+        Console.WriteLine(jsonMovies);
+
+        return jsonMovies;
+    }
+}
+-----------------------------------------------------------------------------------------------------------
+public static void Execute()
+{
+    ConsoleExtension.WriteSeparator("Movie broadcaster example");
+
+    var registry = new MovieRegistry();
+
+    IBroadcaster adapter = new BroadcastAdapter(registry);
+    adapter.BroadcastToExternalPartners();
+}
+
+-----------------------------------------------------------------
+public class Executor : PatternExecutor
+{
+    public override string Name => "Adapter - Structural Pattern";
+
+    public override void Execute()
+    {
+        BillingSystemExecutor.Execute();
+        MovieBroadcasterExecutor.Execute();
+    }
+}
+-----------------------------------------------------------------
